@@ -36,39 +36,47 @@ providers.push(
       password: { label: "Password", type: "password" },
     },
     async authorize(credentials) {
-      if (!credentials?.email || !credentials?.password) {
+      try {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        const email = credentials.email as string;
+        const password = credentials.password as string;
+
+        const user = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (!user || !user.passwordHash) {
+          console.log("[auth] No user found for email:", email);
+          return null;
+        }
+
+        const isValid = await compare(password, user.passwordHash);
+        if (!isValid) {
+          console.log("[auth] Invalid password for:", email);
+          return null;
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          isGM: user.isGM,
+          timezone: user.timezone,
+        };
+      } catch (error) {
+        console.error("[auth] Authorize error:", error);
         return null;
       }
-
-      const email = credentials.email as string;
-      const password = credentials.password as string;
-
-      const user = await prisma.user.findUnique({
-        where: { email },
-      });
-
-      if (!user || !user.passwordHash) {
-        return null;
-      }
-
-      const isValid = await compare(password, user.passwordHash);
-      if (!isValid) {
-        return null;
-      }
-
-      return {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
-        isGM: user.isGM,
-        timezone: user.timezone,
-      };
     },
   })
 );
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET,
   adapter: PrismaAdapter(prismaWithSessionMapping as typeof prisma),
   session: { strategy: "jwt" },
   pages: {
