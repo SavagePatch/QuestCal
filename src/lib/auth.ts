@@ -69,6 +69,7 @@ providers.push(
 );
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET,
   adapter: PrismaAdapter(prismaWithSessionMapping as typeof prisma),
   session: { strategy: "jwt" },
   pages: {
