@@ -1,0 +1,161 @@
+==============================================================
+Phase 3: Core Scheduling Workflow — Testing Walkthrough
+==============================================================
+
+PREREQUISITES
+- pnpm install
+- pnpm prisma migrate dev  (if not already done)
+- pnpm db:seed              (seeds 1 GM + 6 players, 2 campaigns, randomized availability)
+- pnpm dev                  (start dev server at http://localhost:3000)
+
+Seed credentials:
+  GM:       gm@questcal.dev / password123
+  Players:  alice@questcal.dev, bob@questcal.dev, charlie@questcal.dev,
+            diana@questcal.dev, erik@questcal.dev, fumiko@questcal.dev
+            (all use password123)
+
+==============================================================
+TEST 1: Player Availability Page
+==============================================================
+
+1. Sign in as a player (e.g. alice@questcal.dev / password123)
+2. Click "My Availability" in the header nav
+3. You should see a monthly calendar grid with:
+   - 4 rows: Morning, Afternoon, Evening, Late Night
+   - Columns for each day of the current month
+   - Some cells pre-filled from seed data (green = Available, amber = Maybe)
+4. Click an empty cell -> it turns green (Available / "Y")
+5. Click the green cell again -> it turns amber (Maybe / "?")
+6. Click the amber cell again -> it clears back to empty
+7. Use the left/right arrows to navigate months
+   - Moving to a different month fetches that month's data
+   - Returning to the current month should show your changes persisted
+8. Verify the legend at the bottom shows all three states
+
+WHAT TO CHECK:
+- Cells update instantly (optimistic UI)
+- Refreshing the page preserves your changes
+- Different months load independently
+- Weekend columns are slightly dimmed
+
+==============================================================
+TEST 2: GM Heatmap Page
+==============================================================
+
+1. Sign out, then sign in as GM (gm@questcal.dev / password123)
+2. Click "Heatmap" in the header nav
+3. You should see:
+   - A campaign filter dropdown (defaults to "All Campaigns")
+   - Month navigation arrows
+   - A heat-colored grid showing aggregated availability
+   - Cells display counts like "3/4" (3 of 4 players available)
+4. Hover over a populated cell -> tooltip shows player names and statuses
+5. Change the campaign filter dropdown:
+   - "Curse of Strahd" -> shows data for 4 players (Alice, Bob, Charlie, Diana)
+   - "Tomb of Annihilation" -> shows data for 3 players (Bob, Diana, Erik)
+   - "All Campaigns" -> shows deduplicated data across all players
+6. Navigate to different months
+   - Months without seed data should show "No availability data"
+   - Current month should have seed data
+
+WHAT TO CHECK:
+- Heat colors reflect coverage (green = all available, amber = some, gray = none)
+- Tooltip correctly shows player names with yes/maybe distinction
+- Campaign filter changes the grid immediately
+- Player counts in cells match the campaign roster size
+
+==============================================================
+TEST 3: GM Players Page
+==============================================================
+
+1. While signed in as GM, click "Players" in the header nav
+2. You should see a table with columns:
+   - Name, Timezone, Campaigns, Slots (current month), Last Updated
+3. Verify:
+   - All 6 seed players appear (Alice, Bob, Charlie, Diana, Erik, Fumiko)
+   - Timezones vary (New York, Chicago, Denver, Los Angeles, London, Tokyo)
+   - Campaign column shows which campaigns each player belongs to
+     (Bob and Diana should appear in both campaigns)
+   - "Slots" column shows a green count (from seed data) for the current month
+   - "Last Updated" column shows a date
+
+WHAT TO CHECK:
+- GM user does NOT appear in the player list
+- Players are sorted alphabetically by name
+- Slot counts match the seed data (randomized, so numbers will vary)
+
+==============================================================
+TEST 4: GM Campaigns Page
+==============================================================
+
+1. While signed in as GM, click "Campaigns" in the header nav
+2. You should see two campaign cards:
+   - "Curse of Strahd" with 4 player name chips
+   - "Tomb of Annihilation" with 3 player name chips
+3. Each card shows campaign description and player roster
+
+SCHEDULE A SESSION:
+4. On the "Curse of Strahd" card, click "Schedule Session"
+5. An inline form appears with: Date, Time Block, Title, Notes
+6. Fill in:
+   - Date: pick any future date
+   - Time Block: "Evening"
+   - Title: "Session 1: Into Barovia"
+   - Notes: (optional, leave blank or add text)
+7. Click "Schedule"
+8. The form collapses and the new session appears in the
+   "Upcoming Sessions" section of the card
+9. Click "Cancel" to dismiss the form without scheduling
+
+WHAT TO CHECK:
+- Session appears immediately after scheduling (no page refresh needed)
+- Sessions are sorted by date
+- The session shows: date, time block label, and title
+- Scheduling another session on a different campaign works independently
+- Refreshing the page shows the scheduled sessions persist
+
+==============================================================
+TEST 5: Auth Guards
+==============================================================
+
+1. Sign in as a player (e.g. alice@questcal.dev)
+2. Try navigating directly to:
+   - /heatmap -> should redirect to /dashboard
+   - /players -> should redirect to /dashboard
+   - /campaigns -> should redirect to /dashboard
+3. /availability should work normally for the player
+4. Sign out, then try /availability -> should redirect to /auth/signin
+5. Sign in as GM (gm@questcal.dev)
+6. All GM pages should be accessible: /heatmap, /players, /campaigns
+7. /availability should also work for the GM (they can submit availability too)
+
+==============================================================
+TEST 6: Cross-feature Verification
+==============================================================
+
+1. Sign in as a player (alice@questcal.dev)
+2. Go to /availability and set several cells to "yes" for this month
+3. Sign out, sign in as GM (gm@questcal.dev)
+4. Go to /heatmap -> verify Alice's new availability shows up in the counts
+5. Go to /players -> verify Alice's slot count increased
+6. Filter heatmap to "Curse of Strahd" (Alice is in this campaign)
+   -> Alice's availability should appear
+7. Filter to "Tomb of Annihilation" (Alice is NOT in this campaign)
+   -> Alice's availability should NOT appear
+
+==============================================================
+TEST 7: Build Verification
+==============================================================
+
+1. Stop the dev server
+2. Run: pnpm build
+3. Verify it completes with no errors
+4. Check the route list includes:
+   - /availability
+   - /heatmap
+   - /players
+   - /campaigns
+   - /api/availability
+   - /api/campaigns
+   - /api/heatmap
+   - /api/sessions
