@@ -66,6 +66,18 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
+  // Verify user still exists (guards against stale JWT after db re-seed)
+  const userExists = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true },
+  });
+  if (!userExists) {
+    return NextResponse.json(
+      { error: "User not found. Please sign out and sign in again." },
+      { status: 401 }
+    );
+  }
+
   const resolvedMode: AvailabilityMode = VALID_MODES.includes(mode) ? mode : "either";
 
   const record = await prisma.availability.upsert({

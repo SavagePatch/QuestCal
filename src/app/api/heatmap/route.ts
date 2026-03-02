@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
 
   const campaignId = request.nextUrl.searchParams.get("campaignId");
   const month = request.nextUrl.searchParams.get("month");
+  const modeFilter = request.nextUrl.searchParams.get("mode"); // "in_person" | "online" | "either" | null
 
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json(
@@ -45,12 +46,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([]);
   }
 
-  // Fetch availability for those players in the given month
+  // Fetch availability for those players in the given month, optionally filtered by mode
+  const availabilityWhere: Record<string, unknown> = {
+    userId: { in: playerIds },
+    date: { startsWith: month },
+  };
+  // When filtering: "in_person" or "online" also includes "either" (available for both)
+  if (modeFilter === "in_person") {
+    availabilityWhere.mode = { in: ["in_person", "either"] };
+  } else if (modeFilter === "online") {
+    availabilityWhere.mode = { in: ["online", "either"] };
+  }
+  // modeFilter === "either" or null → show all records (no filter)
+
   const availability = await prisma.availability.findMany({
-    where: {
-      userId: { in: playerIds },
-      date: { startsWith: month },
-    },
+    where: availabilityWhere,
     select: { userId: true, date: true, timeBlock: true, status: true, mode: true },
   });
 

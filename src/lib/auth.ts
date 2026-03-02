@@ -103,7 +103,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
+        // Prefer token.sub (standard JWT claim, always preserved) over custom token.id
+        session.user.id = (token.sub ?? token.id) as string;
         session.user.isGM = (token.isGM as boolean) ?? false;
         session.user.timezone = (token.timezone as string) ?? "America/New_York";
       }

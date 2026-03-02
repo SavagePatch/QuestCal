@@ -5,8 +5,8 @@ import { useEffect, useState, useCallback } from "react";
 import MonthNav from "@/components/MonthNav";
 import HeatmapGrid from "@/components/HeatmapGrid";
 import CampaignSelect from "@/components/CampaignSelect";
-import { ALL_BLOCK_KEYS } from "@/lib/constants";
-import type { TimeBlockKey } from "@/lib/constants";
+import { ALL_BLOCK_KEYS, MODE_LABELS } from "@/lib/constants";
+import type { TimeBlockKey, AvailabilityMode } from "@/lib/constants";
 
 interface HeatmapCell {
   date: string;
@@ -29,6 +29,8 @@ interface GmAvailRecord {
   mode: string;
 }
 
+type ModeFilterValue = AvailabilityMode | "all";
+
 function monthStr(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
@@ -45,6 +47,7 @@ export default function HeatmapPage() {
   const [enabledBlocks, setEnabledBlocks] = useState<TimeBlockKey[]>(ALL_BLOCK_KEYS);
   const [showGmOverlay, setShowGmOverlay] = useState(false);
   const [gmAvailability, setGmAvailability] = useState<Map<string, { status: string; mode: string }>>(new Map());
+  const [modeFilter, setModeFilter] = useState<ModeFilterValue>("all");
 
   // Fetch campaigns + enabled blocks on mount
   useEffect(() => {
@@ -63,6 +66,7 @@ export default function HeatmapPage() {
     setLoading(true);
     const params = new URLSearchParams({ month: monthStr(year, month) });
     if (campaignId) params.set("campaignId", campaignId);
+    if (modeFilter !== "all") params.set("mode", modeFilter);
 
     const [heatmapRes, gmRes] = await Promise.all([
       fetch(`/api/heatmap?${params}`),
@@ -91,7 +95,7 @@ export default function HeatmapPage() {
     }
 
     setLoading(false);
-  }, [year, month, campaignId]);
+  }, [year, month, campaignId, modeFilter]);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user?.isGM) {
@@ -113,6 +117,36 @@ export default function HeatmapPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Availability Heatmap</h1>
         <div className="flex items-center gap-4">
+          {/* Mode filter */}
+          <div className="flex items-center gap-1 rounded-md border border-zinc-200 p-0.5 dark:border-zinc-700">
+            <button
+              onClick={() => setModeFilter("all")}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                modeFilter === "all"
+                  ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              All
+            </button>
+            {(Object.keys(MODE_LABELS) as AvailabilityMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setModeFilter(m)}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  modeFilter === m
+                    ? m === "in_person"
+                      ? "bg-emerald-500 text-white"
+                      : m === "online"
+                        ? "bg-blue-500 text-white"
+                        : "bg-violet-500 text-white"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                }`}
+              >
+                {MODE_LABELS[m]}
+              </button>
+            ))}
+          </div>
           <CampaignSelect
             campaigns={campaigns}
             value={campaignId}
