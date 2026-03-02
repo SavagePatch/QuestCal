@@ -51,13 +51,17 @@ export async function GET(request: NextRequest) {
       userId: { in: playerIds },
       date: { startsWith: month },
     },
-    select: { userId: true, date: true, timeBlock: true, status: true },
+    select: { userId: true, date: true, timeBlock: true, status: true, mode: true },
   });
 
   // Aggregate by (date, timeBlock)
   const cellMap = new Map<
     string,
-    { yesCount: number; maybeCount: number; players: { name: string; status: string }[] }
+    {
+      yesCount: number;
+      maybeCount: number;
+      players: { name: string; status: string; mode: string }[];
+    }
   >();
 
   for (const record of availability) {
@@ -71,6 +75,7 @@ export async function GET(request: NextRequest) {
     cell.players.push({
       name: playerMap.get(record.userId) ?? "Unknown",
       status: record.status,
+      mode: record.mode,
     });
   }
 

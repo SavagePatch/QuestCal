@@ -1,11 +1,12 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import MonthNav from "@/components/MonthNav";
 import HeatmapGrid from "@/components/HeatmapGrid";
 import CampaignSelect from "@/components/CampaignSelect";
+import { ALL_BLOCK_KEYS } from "@/lib/constants";
+import type { TimeBlockKey } from "@/lib/constants";
 
 interface HeatmapCell {
   date: string;
@@ -13,12 +14,19 @@ interface HeatmapCell {
   yesCount: number;
   maybeCount: number;
   totalMembers: number;
-  players: { name: string; status: string }[];
+  players: { name: string; status: string; mode: string }[];
 }
 
 interface Campaign {
   id: string;
   name: string;
+}
+
+interface GmAvailRecord {
+  date: string;
+  timeBlock: string;
+  status: string;
+  mode: string;
 }
 
 function monthStr(year: number, month: number): string {
@@ -27,7 +35,6 @@ function monthStr(year: number, month: number): string {
 
 export default function HeatmapPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
   const [campaignId, setCampaignId] = useState("");
@@ -35,8 +42,11 @@ export default function HeatmapPage() {
   const [data, setData] = useState<Map<string, HeatmapCell>>(new Map());
   const [totalMembers, setTotalMembers] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [enabledBlocks, setEnabledBlocks] = useState<TimeBlockKey[]>(ALL_BLOCK_KEYS);
+  const [showGmOverlay, setShowGmOverlay] = useState(false);
+  const [gmAvailability, setGmAvailability] = useState<Map<string, { status: string; mode: string }>>(new Map());
 
-  // Fetch campaigns on mount
+  // Fetch campaigns + enabled blocks on mount
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.isGM) return;
     fetch("/api/campaigns")
@@ -44,6 +54,9 @@ export default function HeatmapPage() {
       .then((result) => {
         setCampaigns(result.map((c: Campaign) => ({ id: c.id, name: c.name })));
       });
+    fetch("/api/settings/time-blocks")
+      .then((res) => res.json())
+      .then((d) => setEnabledBlocks(d.enabledBlocks));
   }, [status, session?.user?.isGM]);
 
   const fetchHeatmap = useCallback(async () => {
@@ -51,9 +64,13 @@ export default function HeatmapPage() {
     const params = new URLSearchParams({ month: monthStr(year, month) });
     if (campaignId) params.set("campaignId", campaignId);
 
-    const res = await fetch(`/api/heatmap?${params}`);
-    if (res.ok) {
-      const cells: HeatmapCell[] = await res.json();
+    const [heatmapRes, gmRes] = await Promise.all([
+      fetch(`/api/heatmap?${params}`),
+      fetch(`/api/availability?month=${monthStr(year, month)}`),
+    ]);
+
+    if (heatmapRes.ok) {
+      const cells: HeatmapCell[] = await heatmapRes.json();
       const map = new Map<string, HeatmapCell>();
       let maxMembers = 0;
       for (const cell of cells) {
@@ -63,6 +80,16 @@ export default function HeatmapPage() {
       setData(map);
       setTotalMembers(maxMembers);
     }
+
+    if (gmRes.ok) {
+      const gmRecords: GmAvailRecord[] = await gmRes.json();
+      const gmMap = new Map<string, { status: string; mode: string }>();
+      for (const r of gmRecords) {
+        gmMap.set(`${r.date}|${r.timeBlock}`, { status: r.status, mode: r.mode });
+      }
+      setGmAvailability(gmMap);
+    }
+
     setLoading(false);
   }, [year, month, campaignId]);
 
@@ -71,14 +98,6 @@ export default function HeatmapPage() {
       fetchHeatmap();
     }
   }, [status, session?.user?.isGM, fetchHeatmap]);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    } else if (status === "authenticated" && !session?.user?.isGM) {
-      router.push("/dashboard");
-    }
-  }, [status, session?.user?.isGM, router]);
 
   if (status === "loading" || loading) {
     return (
@@ -102,10 +121,32 @@ export default function HeatmapPage() {
           <MonthNav year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
         </div>
       </div>
+
+      {/* GM overlay toggle */}
+      <div className="mb-4">
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <input
+            type="checkbox"
+            checked={showGmOverlay}
+            onChange={(e) => setShowGmOverlay(e.target.checked)}
+            className="rounded"
+          />
+          Fade slots where I&apos;m unavailable
+        </label>
+      </div>
+
       {totalMembers === 0 ? (
         <p className="text-zinc-500">No availability data for this month.</p>
       ) : (
-        <HeatmapGrid year={year} month={month} data={data} totalMembers={totalMembers} />
+        <HeatmapGrid
+          year={year}
+          month={month}
+          data={data}
+          totalMembers={totalMembers}
+          enabledBlocks={enabledBlocks}
+          gmAvailability={gmAvailability}
+          showGmOverlay={showGmOverlay}
+        />
       )}
     </div>
   );

@@ -1,15 +1,15 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import CampaignCard from "@/components/CampaignCard";
 
-interface Session {
+interface GameSession {
   id: string;
   date: string;
   timeBlock: string;
   title: string | null;
+  notes?: string | null;
   status: string;
 }
 
@@ -18,12 +18,11 @@ interface Campaign {
   name: string;
   description: string | null;
   members: { id: string; name: string }[];
-  sessions: Session[];
+  sessions: GameSession[];
 }
 
 export default function CampaignsPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,19 +36,36 @@ export default function CampaignsPage() {
       });
   }, [status, session?.user?.isGM]);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    } else if (status === "authenticated" && !session?.user?.isGM) {
-      router.push("/dashboard");
-    }
-  }, [status, session?.user?.isGM, router]);
-
-  function handleSessionCreated(campaignId: string, newSession: Session) {
+  function handleSessionCreated(campaignId: string, newSession: GameSession) {
     setCampaigns((prev) =>
       prev.map((c) =>
         c.id === campaignId
           ? { ...c, sessions: [...c.sessions, newSession].sort((a, b) => a.date.localeCompare(b.date)) }
+          : c
+      )
+    );
+  }
+
+  function handleSessionUpdated(campaignId: string, updated: GameSession) {
+    setCampaigns((prev) =>
+      prev.map((c) =>
+        c.id === campaignId
+          ? {
+              ...c,
+              sessions: c.sessions
+                .map((s) => (s.id === updated.id ? updated : s))
+                .sort((a, b) => a.date.localeCompare(b.date)),
+            }
+          : c
+      )
+    );
+  }
+
+  function handleSessionDeleted(campaignId: string, sessionId: string) {
+    setCampaigns((prev) =>
+      prev.map((c) =>
+        c.id === campaignId
+          ? { ...c, sessions: c.sessions.filter((s) => s.id !== sessionId) }
           : c
       )
     );
@@ -79,6 +95,8 @@ export default function CampaignsPage() {
               key={campaign.id}
               campaign={campaign}
               onSessionCreated={handleSessionCreated}
+              onSessionUpdated={handleSessionUpdated}
+              onSessionDeleted={handleSessionDeleted}
             />
           ))}
         </div>

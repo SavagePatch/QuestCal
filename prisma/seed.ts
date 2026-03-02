@@ -4,12 +4,20 @@ import { hashSync } from "bcryptjs";
 const prisma = new PrismaClient();
 
 const TIME_BLOCKS = ["morning", "afternoon", "evening", "late_night"] as const;
+const MODES = ["in_person", "online", "either"] as const;
 
 function randomStatus(): "yes" | "maybe" | null {
   const roll = Math.random();
   if (roll < 0.35) return "yes";
   if (roll < 0.55) return "maybe";
   return null; // "no" — don't store a record
+}
+
+function randomMode(): "in_person" | "online" | "either" {
+  const roll = Math.random();
+  if (roll < 0.3) return "in_person";
+  if (roll < 0.6) return "online";
+  return "either";
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -34,6 +42,7 @@ async function main() {
   await prisma.account.deleteMany();
   await prisma.verificationToken.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.siteSettings.deleteMany();
 
   const defaultPassword = hashSync("password123", 10);
 
@@ -118,19 +127,23 @@ async function main() {
     date: string;
     timeBlock: string;
     status: string;
+    mode: string;
   }[] = [];
 
-  for (const player of players) {
+  // Players + GM all get availability
+  const allUsers = [gm, ...players];
+  for (const user of allUsers) {
     for (let day = 1; day <= daysInMonth; day++) {
       const date = formatDate(year, month, day);
       for (const block of TIME_BLOCKS) {
         const status = randomStatus();
         if (status) {
           availabilityRecords.push({
-            userId: player.id,
+            userId: user.id,
             date,
             timeBlock: block,
             status,
+            mode: randomMode(),
           });
         }
       }
@@ -143,6 +156,14 @@ async function main() {
       data: availabilityRecords,
     });
   }
+
+  // Create default site settings
+  await prisma.siteSettings.create({
+    data: {
+      id: "default",
+      enabledBlocks: JSON.stringify(["morning", "afternoon", "evening", "late_night"]),
+    },
+  });
 
   // Print summary
   console.log("Seed completed successfully!");

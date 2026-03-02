@@ -30,7 +30,13 @@ export default function Header() {
         >
           Dashboard
         </Link>
-        {isGM ? (
+        <Link
+          href="/availability"
+          className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          My Availability
+        </Link>
+        {isGM && (
           <>
             <Link
               href="/heatmap"
@@ -51,13 +57,6 @@ export default function Header() {
               Campaigns
             </Link>
           </>
-        ) : (
-          <Link
-            href="/availability"
-            className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            My Availability
-          </Link>
         )}
       </nav>
       <div className="flex items-center gap-3">

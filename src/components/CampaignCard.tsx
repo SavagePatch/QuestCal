@@ -4,11 +4,12 @@ import { TIME_BLOCKS } from "@/lib/constants";
 import type { TimeBlockKey } from "@/lib/constants";
 import { useState } from "react";
 
-interface Session {
+interface GameSession {
   id: string;
   date: string;
   timeBlock: string;
   title: string | null;
+  notes?: string | null;
   status: string;
 }
 
@@ -17,50 +18,104 @@ interface Campaign {
   name: string;
   description: string | null;
   members: { id: string; name: string }[];
-  sessions: Session[];
+  sessions: GameSession[];
 }
 
 interface CampaignCardProps {
   campaign: Campaign;
-  onSessionCreated: (campaignId: string, session: Session) => void;
+  onSessionCreated: (campaignId: string, session: GameSession) => void;
+  onSessionUpdated: (campaignId: string, session: GameSession) => void;
+  onSessionDeleted: (campaignId: string, sessionId: string) => void;
 }
 
 const blockKeys = Object.keys(TIME_BLOCKS) as TimeBlockKey[];
 
-export default function CampaignCard({ campaign, onSessionCreated }: CampaignCardProps) {
+export default function CampaignCard({
+  campaign,
+  onSessionCreated,
+  onSessionUpdated,
+  onSessionDeleted,
+}: CampaignCardProps) {
   const [showForm, setShowForm] = useState(false);
+  const [editingSession, setEditingSession] = useState<GameSession | null>(null);
   const [date, setDate] = useState("");
   const [timeBlock, setTimeBlock] = useState<TimeBlockKey>("evening");
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function openCreate() {
+    setEditingSession(null);
+    setDate("");
+    setTimeBlock("evening");
+    setTitle("");
+    setNotes("");
+    setShowForm(true);
+  }
+
+  function openEdit(s: GameSession) {
+    setEditingSession(s);
+    setDate(s.date);
+    setTimeBlock(s.timeBlock as TimeBlockKey);
+    setTitle(s.title ?? "");
+    setNotes(s.notes ?? "");
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingSession(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!date) return;
 
     setLoading(true);
-    const res = await fetch("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        campaignId: campaign.id,
-        date,
-        timeBlock,
-        title: title || undefined,
-        notes: notes || undefined,
-      }),
-    });
 
-    if (res.ok) {
-      const session = await res.json();
-      onSessionCreated(campaign.id, session);
-      setShowForm(false);
-      setDate("");
-      setTitle("");
-      setNotes("");
+    if (editingSession) {
+      // PATCH existing session
+      const res = await fetch(`/api/sessions/${editingSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, timeBlock, title: title || null, notes: notes || null }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        onSessionUpdated(campaign.id, updated);
+        closeForm();
+      }
+    } else {
+      // POST new session
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          date,
+          timeBlock,
+          title: title || undefined,
+          notes: notes || undefined,
+        }),
+      });
+      if (res.ok) {
+        const session = await res.json();
+        onSessionCreated(campaign.id, session);
+        closeForm();
+      }
     }
+
     setLoading(false);
+  }
+
+  async function handleDelete(sessionId: string) {
+    setDeletingId(sessionId);
+    const res = await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+    if (res.ok) {
+      onSessionDeleted(campaign.id, sessionId);
+    }
+    setDeletingId(null);
   }
 
   return (
@@ -96,7 +151,7 @@ export default function CampaignCard({ campaign, onSessionCreated }: CampaignCar
             {campaign.sessions.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"
+                className="group flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"
               >
                 <span className="font-medium">{s.date}</span>
                 <span className="text-zinc-400">&middot;</span>
@@ -107,6 +162,21 @@ export default function CampaignCard({ campaign, onSessionCreated }: CampaignCar
                     <span>{s.title}</span>
                   </>
                 )}
+                <span className="ml-auto flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    onClick={() => openEdit(s)}
+                    className="rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(s.id)}
+                    disabled={deletingId === s.id}
+                    className="rounded px-1.5 py-0.5 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:hover:bg-red-950"
+                  >
+                    {deletingId === s.id ? "..." : "Delete"}
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -116,6 +186,9 @@ export default function CampaignCard({ campaign, onSessionCreated }: CampaignCar
       <div className="mt-4">
         {showForm ? (
           <form onSubmit={handleSubmit} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-700">
+            <div className="mb-2 text-sm font-medium">
+              {editingSession ? "Edit Session" : "Schedule Session"}
+            </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">Date</label>
@@ -171,11 +244,13 @@ export default function CampaignCard({ campaign, onSessionCreated }: CampaignCar
                 disabled={loading}
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
-                {loading ? "Scheduling..." : "Schedule"}
+                {loading
+                  ? editingSession ? "Saving..." : "Scheduling..."
+                  : editingSession ? "Save" : "Schedule"}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 Cancel
@@ -184,7 +259,7 @@ export default function CampaignCard({ campaign, onSessionCreated }: CampaignCar
           </form>
         ) : (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={openCreate}
             className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
           >
             Schedule Session
