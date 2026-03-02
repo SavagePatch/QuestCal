@@ -94,12 +94,19 @@ model Availability {
   date      String // ISO date string "YYYY-MM-DD"
   timeBlock String // "morning" | "afternoon" | "evening" | "late_night"
   status    String // "yes" | "no" | "maybe"
+  mode      String   @default("either") // "in_person" | "online" | "either"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date, timeBlock])
+}
+
+model SiteSettings {
+  id            String   @id @default("default")
+  enabledBlocks String   @default("[\"morning\",\"afternoon\",\"evening\",\"late_night\"]") // JSON array of TimeBlockKey
+  updatedAt     DateTime @updatedAt
 }
 
 model GameSession {

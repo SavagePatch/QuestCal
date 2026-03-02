@@ -1,7 +1,7 @@
 "use client";
 
-import { TIME_BLOCKS } from "@/lib/constants";
-import type { TimeBlockKey } from "@/lib/constants";
+import { TIME_BLOCKS, MODE_LABELS, formatTimeRange } from "@/lib/constants";
+import type { TimeBlockKey, AvailabilityMode } from "@/lib/constants";
 import { useState } from "react";
 
 interface HeatmapCell {
@@ -10,7 +10,7 @@ interface HeatmapCell {
   yesCount: number;
   maybeCount: number;
   totalMembers: number;
-  players: { name: string; status: string }[];
+  players: { name: string; status: string; mode: string }[];
 }
 
 interface HeatmapGridProps {
@@ -18,6 +18,9 @@ interface HeatmapGridProps {
   month: number; // 0-indexed
   data: Map<string, HeatmapCell>; // key: "YYYY-MM-DD|timeBlock"
   totalMembers: number;
+  enabledBlocks: TimeBlockKey[];
+  gmAvailability?: Map<string, { status: string; mode: string }>; // key: "YYYY-MM-DD|timeBlock"
+  showGmOverlay?: boolean;
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -30,19 +33,26 @@ function formatDate(year: number, month: number, day: number): string {
   return `${year}-${m}-${d}`;
 }
 
-function getHeatColor(available: number, total: number): string {
-  if (total === 0 || available === 0) return "bg-zinc-100 dark:bg-zinc-800";
+function getHeatColor(available: number, total: number): { bg: string; text: string } {
+  if (total === 0 || available === 0) return { bg: "bg-zinc-100 dark:bg-zinc-800", text: "text-zinc-400 dark:text-zinc-600" };
   const ratio = available / total;
-  if (ratio >= 1) return "bg-emerald-500";
-  if (ratio >= 0.75) return "bg-emerald-400";
-  if (ratio >= 0.5) return "bg-amber-300";
-  if (ratio >= 0.25) return "bg-amber-200";
-  return "bg-amber-100";
+  // Everyone available — purple with gold text
+  if (ratio >= 1) return { bg: "bg-purple-600", text: "text-amber-300 font-bold" };
+  if (ratio >= 0.75) return { bg: "bg-emerald-400", text: "text-zinc-800" };
+  if (ratio >= 0.5) return { bg: "bg-amber-300", text: "text-zinc-800" };
+  if (ratio >= 0.25) return { bg: "bg-amber-200", text: "text-zinc-800" };
+  return { bg: "bg-amber-100", text: "text-zinc-700" };
 }
 
-const blockKeys = Object.keys(TIME_BLOCKS) as TimeBlockKey[];
-
-export default function HeatmapGrid({ year, month, data, totalMembers }: HeatmapGridProps) {
+export default function HeatmapGrid({
+  year,
+  month,
+  data,
+  totalMembers,
+  enabledBlocks,
+  gmAvailability,
+  showGmOverlay = false,
+}: HeatmapGridProps) {
   const daysInMonth = getDaysInMonth(year, month);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const [tooltip, setTooltip] = useState<{ key: string; x: number; y: number } | null>(null);
@@ -81,36 +91,48 @@ export default function HeatmapGrid({ year, month, data, totalMembers }: Heatmap
           </tr>
         </thead>
         <tbody>
-          {blockKeys.map((block) => (
-            <tr key={block}>
-              <td className="sticky left-0 z-10 bg-white px-2 py-1 font-medium text-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-                {TIME_BLOCKS[block].label}
-              </td>
-              {days.map((day) => {
-                const date = formatDate(year, month, day);
-                const key = `${date}|${block}`;
-                const cell = data.get(key);
-                const available = cell ? cell.yesCount + cell.maybeCount : 0;
-                const total = totalMembers;
+          {enabledBlocks.map((block) => {
+            const info = TIME_BLOCKS[block];
+            return (
+              <tr key={block}>
+                <td className="sticky left-0 z-10 bg-white px-2 py-1 dark:bg-zinc-950">
+                  <div className="font-medium text-zinc-700 dark:text-zinc-300">
+                    {info.label}
+                  </div>
+                  <div className="text-[10px] text-zinc-400">
+                    {formatTimeRange(info.start, info.end)}
+                  </div>
+                </td>
+                {days.map((day) => {
+                  const date = formatDate(year, month, day);
+                  const key = `${date}|${block}`;
+                  const cell = data.get(key);
+                  const available = cell ? cell.yesCount + cell.maybeCount : 0;
+                  const total = totalMembers;
+                  const heat = getHeatColor(available, total);
 
-                return (
-                  <td key={day} className="px-0.5 py-0.5">
-                    <div
-                      className={`flex h-7 min-w-[1.75rem] items-center justify-center rounded text-[10px] font-medium ${getHeatColor(available, total)} ${
-                        available > 0
-                          ? "cursor-default text-zinc-800"
-                          : "text-zinc-400 dark:text-zinc-600"
-                      }`}
-                      onMouseEnter={(e) => cell && handleMouseEnter(key, e)}
-                      onMouseLeave={() => setTooltip(null)}
-                    >
-                      {available > 0 ? `${available}/${total}` : ""}
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                  // GM overlay: desaturate if GM is NOT available for this slot
+                  const gmCell = gmAvailability?.get(key);
+                  const gmUnavailable = showGmOverlay && !gmCell;
+                  const opacityClass = gmUnavailable ? "opacity-30" : "";
+
+                  return (
+                    <td key={day} className="px-0.5 py-0.5">
+                      <div
+                        className={`flex h-7 min-w-[1.75rem] items-center justify-center rounded text-[10px] font-medium ${heat.bg} ${heat.text} ${opacityClass} ${
+                          available > 0 ? "cursor-default" : ""
+                        }`}
+                        onMouseEnter={(e) => cell && handleMouseEnter(key, e)}
+                        onMouseLeave={() => setTooltip(null)}
+                      >
+                        {available > 0 ? `${available}/${total}` : ""}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
@@ -133,14 +155,21 @@ export default function HeatmapGrid({ year, month, data, totalMembers }: Heatmap
               <span className="text-zinc-400">
                 ({p.status === "yes" ? "Available" : "Maybe"})
               </span>
+              <span className="text-zinc-300">
+                {MODE_LABELS[p.mode as AvailabilityMode] ?? ""}
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-emerald-500" /> All available
+          <span className="inline-block h-3 w-3 rounded bg-purple-600" />
+          <span className="text-amber-600 font-semibold">Everyone available</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded bg-emerald-400" /> Most available
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block h-3 w-3 rounded bg-amber-300" /> Some available
@@ -148,6 +177,11 @@ export default function HeatmapGrid({ year, month, data, totalMembers }: Heatmap
         <span className="flex items-center gap-1">
           <span className="inline-block h-3 w-3 rounded bg-zinc-100 dark:bg-zinc-800" /> None
         </span>
+        {showGmOverlay && (
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-3 w-3 rounded bg-zinc-300 opacity-30" /> GM unavailable
+          </span>
+        )}
       </div>
     </div>
   );

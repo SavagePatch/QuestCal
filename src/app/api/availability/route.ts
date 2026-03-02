@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TIME_BLOCKS } from "@/lib/constants";
-import type { TimeBlockKey, AvailabilityStatus } from "@/lib/constants";
+import type { TimeBlockKey, AvailabilityStatus, AvailabilityMode } from "@/lib/constants";
+
+const VALID_MODES: AvailabilityMode[] = ["in_person", "online", "either"];
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -23,7 +25,7 @@ export async function GET(request: NextRequest) {
       userId: session.user.id,
       date: { startsWith: month },
     },
-    select: { date: true, timeBlock: true, status: true },
+    select: { date: true, timeBlock: true, status: true, mode: true },
   });
 
   return NextResponse.json(records);
@@ -36,7 +38,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { date, timeBlock, status } = body;
+  const { date, timeBlock, status, mode } = body;
 
   if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
@@ -64,6 +66,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
+  const resolvedMode: AvailabilityMode = VALID_MODES.includes(mode) ? mode : "either";
+
   const record = await prisma.availability.upsert({
     where: {
       userId_date_timeBlock: {
@@ -72,12 +76,13 @@ export async function PUT(request: NextRequest) {
         timeBlock: timeBlock as TimeBlockKey,
       },
     },
-    update: { status },
+    update: { status, mode: resolvedMode },
     create: {
       userId: session.user.id,
       date,
       timeBlock: timeBlock as TimeBlockKey,
       status,
+      mode: resolvedMode,
     },
   });
 
@@ -85,5 +90,6 @@ export async function PUT(request: NextRequest) {
     date: record.date,
     timeBlock: record.timeBlock,
     status: record.status,
+    mode: record.mode,
   });
 }
