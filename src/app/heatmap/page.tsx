@@ -1,7 +1,6 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import MonthNav from "@/components/MonthNav";
 import HeatmapGrid from "@/components/HeatmapGrid";
@@ -27,7 +26,6 @@ function monthStr(year: number, month: number): string {
 
 export default function HeatmapPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
   const [campaignId, setCampaignId] = useState("");
@@ -71,14 +69,6 @@ export default function HeatmapPage() {
       fetchHeatmap();
     }
   }, [status, session?.user?.isGM, fetchHeatmap]);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    } else if (status === "authenticated" && !session?.user?.isGM) {
-      router.push("/dashboard");
-    }
-  }, [status, session?.user?.isGM, router]);
 
   if (status === "loading" || loading) {
     return (

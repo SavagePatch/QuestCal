@@ -1,7 +1,6 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import CampaignCard from "@/components/CampaignCard";
 
@@ -23,7 +22,6 @@ interface Campaign {
 
 export default function CampaignsPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,14 +34,6 @@ export default function CampaignsPage() {
         setLoading(false);
       });
   }, [status, session?.user?.isGM]);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    } else if (status === "authenticated" && !session?.user?.isGM) {
-      router.push("/dashboard");
-    }
-  }, [status, session?.user?.isGM, router]);
 
   function handleSessionCreated(campaignId: string, newSession: Session) {
     setCampaigns((prev) =>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import MonthNav from "@/components/MonthNav";
 import AvailabilityGrid from "@/components/AvailabilityGrid";
@@ -18,8 +17,7 @@ function monthStr(year: number, month: number): string {
 }
 
 export default function AvailabilityPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
+  const { status } = useSession();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
   const [data, setData] = useState<Map<string, AvailabilityStatus>>(new Map());
@@ -44,12 +42,6 @@ export default function AvailabilityPage() {
       fetchData();
     }
   }, [status, fetchData]);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    }
-  }, [status, router]);
 
   function handleMonthChange(newYear: number, newMonth: number) {
     setYear(newYear);
