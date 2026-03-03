@@ -165,6 +165,72 @@ async function main() {
     },
   });
 
+  // Create a sample game session for campaign 1
+  const sampleSession = await prisma.gameSession.create({
+    data: {
+      campaignId: campaign1.id,
+      date: formatDate(year, month, Math.min(15, daysInMonth)),
+      timeBlock: "evening",
+      title: "Session 12: Into the Amber Temple",
+      status: "scheduled",
+    },
+  });
+
+  // Add some players to the session roster
+  for (const player of campaign1Players.slice(0, 3)) {
+    await prisma.gameSessionPlayer.create({
+      data: { sessionId: sampleSession.id, userId: player.id },
+    });
+  }
+
+  // Create sample notifications for players
+  const notificationRecords: {
+    userId: string;
+    sessionId: string | null;
+    type: string;
+    message: string;
+    read: boolean;
+    createdAt: Date;
+  }[] = [];
+
+  // Notification: session scheduled (for all campaign 1 players)
+  for (const player of campaign1Players) {
+    notificationRecords.push({
+      userId: player.id,
+      sessionId: sampleSession.id,
+      type: "session_scheduled",
+      message: `New session scheduled: "Session 12: Into the Amber Temple" on ${formatDate(year, month, Math.min(15, daysInMonth))} (Evening)`,
+      read: false,
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+    });
+  }
+
+  // Older read notification for Alice
+  notificationRecords.push({
+    userId: players[0].id,
+    sessionId: null,
+    type: "session_cancelled",
+    message: "Session cancelled: \"Session 11: Castle Ravenloft\" has been cancelled.",
+    read: true,
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+  });
+
+  // Notification for campaign 2 players
+  for (const player of campaign2Players) {
+    notificationRecords.push({
+      userId: player.id,
+      sessionId: null,
+      type: "session_scheduled",
+      message: `Reminder: Tomb of Annihilation session coming up this week!`,
+      read: player === players[1], // Bob already read it
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+    });
+  }
+
+  if (notificationRecords.length > 0) {
+    await prisma.notification.createMany({ data: notificationRecords });
+  }
+
   // Print summary
   console.log("Seed completed successfully!");
   console.log(`  GM: ${gm.name} (${gm.email})`);
@@ -174,6 +240,8 @@ async function main() {
   console.log(`    - ${campaign1.name}: ${campaign1Players.length} players + GM`);
   console.log(`    - ${campaign2.name}: ${campaign2Players.length} players + GM`);
   console.log(`  Availability records: ${availabilityRecords.length}`);
+  console.log(`  Game sessions: 1`);
+  console.log(`  Notifications: ${notificationRecords.length}`);
   console.log(`  All users password: password123`);
 }
 

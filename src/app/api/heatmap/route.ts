@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const campaignId = request.nextUrl.searchParams.get("campaignId");
   const month = request.nextUrl.searchParams.get("month");
   const modeFilter = request.nextUrl.searchParams.get("mode"); // "in_person" | "online" | "either" | null
+  const suggest = request.nextUrl.searchParams.get("suggest") === "true";
 
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json(
@@ -101,5 +102,26 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json(result);
+  if (!suggest) {
+    return NextResponse.json(result);
+  }
+
+  // Build topSlots: rank by yesCount desc, then maybeCount desc, only future dates
+  const today = new Date().toISOString().slice(0, 10);
+  const topSlots = [...result]
+    .filter((s) => s.date >= today && (s.yesCount + s.maybeCount) > 0)
+    .sort((a, b) => {
+      if (b.yesCount !== a.yesCount) return b.yesCount - a.yesCount;
+      return b.maybeCount - a.maybeCount;
+    })
+    .slice(0, 5)
+    .map((s) => ({
+      date: s.date,
+      timeBlock: s.timeBlock,
+      yesCount: s.yesCount,
+      maybeCount: s.maybeCount,
+      totalMembers: s.totalMembers,
+    }));
+
+  return NextResponse.json({ cells: result, topSlots });
 }

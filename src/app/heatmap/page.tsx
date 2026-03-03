@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import MonthNav from "@/components/MonthNav";
 import HeatmapGrid from "@/components/HeatmapGrid";
 import CampaignSelect from "@/components/CampaignSelect";
+import TopSlots from "@/components/TopSlots";
 import { ALL_BLOCK_KEYS, MODE_LABELS } from "@/lib/constants";
 import type { TimeBlockKey, AvailabilityMode } from "@/lib/constants";
 
@@ -20,6 +21,14 @@ interface HeatmapCell {
 interface Campaign {
   id: string;
   name: string;
+}
+
+interface TopSlot {
+  date: string;
+  timeBlock: string;
+  yesCount: number;
+  maybeCount: number;
+  totalMembers: number;
 }
 
 interface GmAvailRecord {
@@ -48,6 +57,8 @@ export default function HeatmapPage() {
   const [showGmOverlay, setShowGmOverlay] = useState(false);
   const [gmAvailability, setGmAvailability] = useState<Map<string, { status: string; mode: string }>>(new Map());
   const [modeFilter, setModeFilter] = useState<ModeFilterValue>("all");
+  const [topSlots, setTopSlots] = useState<TopSlot[]>([]);
+  const [highlightedSlots, setHighlightedSlots] = useState<Set<string>>(new Set());
 
   // Fetch campaigns + enabled blocks on mount
   useEffect(() => {
@@ -64,7 +75,7 @@ export default function HeatmapPage() {
 
   const fetchHeatmap = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ month: monthStr(year, month) });
+    const params = new URLSearchParams({ month: monthStr(year, month), suggest: "true" });
     if (campaignId) params.set("campaignId", campaignId);
     if (modeFilter !== "all") params.set("mode", modeFilter);
 
@@ -74,7 +85,10 @@ export default function HeatmapPage() {
     ]);
 
     if (heatmapRes.ok) {
-      const cells: HeatmapCell[] = await heatmapRes.json();
+      const json = await heatmapRes.json();
+      const cells: HeatmapCell[] = json.cells;
+      const slots: TopSlot[] = json.topSlots ?? [];
+
       const map = new Map<string, HeatmapCell>();
       let maxMembers = 0;
       for (const cell of cells) {
@@ -83,6 +97,8 @@ export default function HeatmapPage() {
       }
       setData(map);
       setTotalMembers(maxMembers);
+      setTopSlots(slots);
+      setHighlightedSlots(new Set(slots.map((s) => `${s.date}|${s.timeBlock}`)));
     }
 
     if (gmRes.ok) {
@@ -172,15 +188,19 @@ export default function HeatmapPage() {
       {totalMembers === 0 ? (
         <p className="text-zinc-500">No availability data for this month.</p>
       ) : (
-        <HeatmapGrid
-          year={year}
-          month={month}
-          data={data}
-          totalMembers={totalMembers}
-          enabledBlocks={enabledBlocks}
-          gmAvailability={gmAvailability}
-          showGmOverlay={showGmOverlay}
-        />
+        <>
+          <TopSlots slots={topSlots} />
+          <HeatmapGrid
+            year={year}
+            month={month}
+            data={data}
+            totalMembers={totalMembers}
+            enabledBlocks={enabledBlocks}
+            gmAvailability={gmAvailability}
+            showGmOverlay={showGmOverlay}
+            highlightedSlots={highlightedSlots}
+          />
+        </>
       )}
     </div>
   );

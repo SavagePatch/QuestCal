@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TIME_BLOCKS } from "@/lib/constants";
+import { notifySessionScheduled } from "@/lib/notifications";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -45,6 +46,16 @@ export async function POST(request: NextRequest) {
       status: "scheduled",
     },
   });
+
+  // Notify campaign members
+  notifySessionScheduled(
+    campaignId,
+    gameSession.id,
+    date,
+    timeBlock,
+    title || null,
+    session.user.id
+  ).catch(console.error);
 
   return NextResponse.json(
     {

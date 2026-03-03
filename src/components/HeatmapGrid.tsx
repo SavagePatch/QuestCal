@@ -21,6 +21,7 @@ interface HeatmapGridProps {
   enabledBlocks: TimeBlockKey[];
   gmAvailability?: Map<string, { status: string; mode: string }>; // key: "YYYY-MM-DD|timeBlock"
   showGmOverlay?: boolean;
+  highlightedSlots?: Set<string>; // keys to highlight with gold border
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -52,6 +53,7 @@ export default function HeatmapGrid({
   enabledBlocks,
   gmAvailability,
   showGmOverlay = false,
+  highlightedSlots,
 }: HeatmapGridProps) {
   const daysInMonth = getDaysInMonth(year, month);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -115,11 +117,14 @@ export default function HeatmapGrid({
                   const gmCell = gmAvailability?.get(key);
                   const gmUnavailable = showGmOverlay && !gmCell;
                   const opacityClass = gmUnavailable ? "opacity-30" : "";
+                  const isHighlighted = highlightedSlots?.has(key);
 
                   return (
                     <td key={day} className="px-0.5 py-0.5">
                       <div
                         className={`flex h-7 min-w-[1.75rem] items-center justify-center rounded text-[10px] font-medium ${heat.bg} ${heat.text} ${opacityClass} ${
+                          isHighlighted ? "ring-2 ring-amber-400 ring-offset-1" : ""
+                        } ${
                           available > 0 ? "cursor-default" : ""
                         }`}
                         onMouseEnter={(e) => cell && handleMouseEnter(key, e)}
